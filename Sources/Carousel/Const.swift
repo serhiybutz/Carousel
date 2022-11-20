@@ -38,4 +38,9 @@ enum Const {
     enum CubicBezierCurve {
         static let tolerance: CGFloat = 0.0001
     }
+
+    enum CrossFade {
+        static let rangeRatio: CGFloat = 0.15
+        static let opacityCorrection: CGFloat = 0.75
+    }
 }

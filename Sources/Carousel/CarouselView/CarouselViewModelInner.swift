@@ -57,7 +57,7 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
                 .wheelParameters
                 .angle(forCircleOffset: newValue)
 
-            updateOverlappingPassAnimation()
+            updateCrossFadeAnimation()
         }
     }
 
@@ -72,9 +72,7 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
 
     private var wheelMomentum: WheelMomentum?
 
-    @Published var fadingOutIdx: Int?
-    @Published var fadingInIdx: Int?
-    @Published var fadingProgress: CGFloat = 0
+    @Published var crossFadeState: CrossFadeParameters?
 
     // MARK: - Initialization
 
@@ -172,24 +170,9 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
         }
     }
 
-    func updateOverlappingPassAnimation() {
-
+    func updateCrossFadeAnimation() {
         let geometry = makeGeometryParameters()
-
-        if let leftIdx = geometry.nearestStepIdx(byAngle: wheelAngle, neighborSelectionRule: .left),
-           let rightIdx = geometry.nearestStepIdx(byAngle: wheelAngle, neighborSelectionRule: .right) {
-            let left = (getZIndex(at: leftIdx), leftIdx)
-            let right = (getZIndex(at: rightIdx), rightIdx)
-            let seq = [left, right]
-                .sorted(by: { $0.0 > $1.0 })
-            fadingOutIdx = seq.map(\.1).first!
-            fadingInIdx = seq.map(\.1).last!
-            fadingProgress = (1 - min((left.0 - right.0).magnitude, 0.01) / 0.01) * 0.375 // opacity
-        } else {
-            fadingOutIdx = nil
-            fadingInIdx = nil
-            fadingProgress = 0
-        }
+        self.crossFadeState = CrossFadeParameters(geometry: geometry, wheelAngle: wheelAngle)
     }
 
     private func calcZoomFactor(_ x: CGFloat) -> CGFloat? {

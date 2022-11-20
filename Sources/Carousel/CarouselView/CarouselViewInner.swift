@@ -28,21 +28,20 @@ struct CarouselViewInner<T: CarouselDataSource>: View {
             if let visIndices = viewModel.visibleIndices {
 
                 ForEach(visIndices, id: \.self) { idx in
-                    if let fadingInIdx = viewModel.fadingInIdx,
-                       let fadingOutIdx = viewModel.fadingOutIdx,
-                       idx == fadingInIdx || idx == fadingOutIdx {
-                        if idx == fadingInIdx {
-                            ItemView(idx: fadingInIdx, viewModel: viewModel)
-                            ItemView(idx: fadingOutIdx, viewModel: viewModel)
+                    if let crossFadeState = viewModel.crossFadeState,
+                       idx == crossFadeState.fadeInIdx || idx == crossFadeState.fadeOutIdx {
+                        if idx == crossFadeState.fadeInIdx {
+                            ItemView(idx: crossFadeState.fadeInIdx, viewModel: viewModel)
+                            ItemView(idx: crossFadeState.fadeOutIdx, viewModel: viewModel)
                                 .overlay(
-                                    ItemView(idx: fadingInIdx, viewModel: viewModel)
-                                        .opacity(viewModel.fadingProgress)
+                                    ItemView(idx: crossFadeState.fadeInIdx, viewModel: viewModel)
+                                        .opacity(crossFadeState.fadeInOpacity)
                                         .mask(
                                             Group {
                                                 Rectangle()
                                                     .frame(width: viewModel.itemSize.width, height: viewModel.itemSize.height)
-                                                    .scaleEffect(viewModel.visible.getZoomFactor(at: fadingOutIdx))
-                                                    .offset(viewModel.visible.getOffset(at: fadingOutIdx).modified {
+                                                    .scaleEffect(viewModel.visible.getZoomFactor(at: crossFadeState.fadeOutIdx))
+                                                    .offset(viewModel.visible.getOffset(at: crossFadeState.fadeOutIdx).modified {
                                                         CGSize(
                                                             width: $0.width - viewModel.itemSize.width / 2,
                                                             height: $0.height - viewModel.itemSize.height / 2

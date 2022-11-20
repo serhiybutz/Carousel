@@ -31,7 +31,6 @@ public struct CarouselView<T: CarouselDataSource>: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .border(.yellow)
         .getViewFrame(controller: viewModel.viewFrameModifierController) { frame in
             viewModel.frame = frame
         }
