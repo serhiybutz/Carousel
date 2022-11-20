@@ -1,0 +1,481 @@
+//
+//  CarouselViewModelInner.swift
+//  Carousel
+//
+//  Created by Serhiy Butz on 2022-11-19.
+//
+
+import SwiftUI
+import Combine
+
+@MainActor
+public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObject {
+
+    enum GestureEvent {
+        case change(location: CGPoint, translation: CGFloat, velocity: CGFloat)
+        case end(location: CGPoint, translation: CGFloat, velocity: CGFloat)
+    }
+
+    enum TapKind {
+        case single, double
+    }
+
+    // MARK: - Properties
+
+    private weak var dataSource: T?
+    private weak var delegate: CarouselDelegate?
+
+    @Binding
+    var activeIdx: Int
+
+    let frame: CGRect
+
+    var bounds: CGRect {
+        CGRect(origin: .zero, size: frame.size)
+    }
+
+    var visCenter: CGPoint {
+        CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+
+    // The angle between the screen center and the origin wheel pos
+    @Published var wheelAngle: CGFloat {
+        didSet {
+            guard oldValue != wheelAngle else { return }
+            updateActiveIdxIfNeeded()
+        }
+    }
+
+    var circleOffset: CGFloat {
+        get {
+            makeGeometryParameters()
+                .wheelParameters
+                .circleOffset(forAngle: wheelAngle)
+        }
+        set {
+            wheelAngle = makeGeometryParameters()
+                .wheelParameters
+                .angle(forCircleOffset: newValue)
+
+            updateOverlappingPassAnimation()
+        }
+    }
+
+    let wheelRadius: CGFloat
+    let angleStep: CGFloat
+    let itemSize: CGSize
+
+    private(set) var startDragCircleOffset: CGFloat?
+    private(set) var startScrollCircleOffset: CGFloat?
+
+    private(set) var isDraggingHolding: Bool = false
+
+    private var wheelMomentum: WheelMomentum?
+
+    @Published var fadingOutIdx: Int?
+    @Published var fadingInIdx: Int?
+    @Published var fadingProgress: CGFloat = 0
+
+    // MARK: - Initialization
+
+    init(args: CarouselViewModel<T>.Args, activeIdx: Binding<Int>, frame: CGRect) {
+
+        let bounds = CGRect(origin: .zero, size: frame.size)
+        let geometry = Self.makeGeometryParameters(
+            bounds: bounds,
+            wheelRadius: args.wheelRadius,
+            angleStep: args.angleStep,
+            itemSize: args.itemSize,
+            itemsCount: args.dataSource.carouselItemCount)
+
+        self.dataSource = args.dataSource
+        self.delegate = args.delegate
+        self.wheelRadius = args.wheelRadius
+        self.angleStep = args.angleStep
+        self.itemSize = args.itemSize
+        self.frame = frame
+
+        self._activeIdx = activeIdx
+        self.wheelAngle = geometry.angle(forItemIdx: activeIdx.wrappedValue)
+    }
+
+    // MARK: - API
+
+    var visible: some VisibleWindowDataSource { self }
+
+    func receiveDragGestureEvent(_ event: GestureEvent) {
+
+        resetWheelMomentum()
+
+        switch event {
+        case let .change(location, translation, _):
+            if startDragCircleOffset == nil {
+
+                resetWheelMomentum()
+                startDragCircleOffset = circleOffset
+
+                self.isDraggingHolding = bounds.contains(location)
+                    && visibleIndices?.contains(where: { getItemFrame(at: $0).contains(location) }) ?? false
+            }
+
+            if isDraggingHolding {
+                let distance = startDragCircleOffset! - translation
+                circleOffset = makeRubberBandParameters()
+                    .clamp(distance)
+            }
+        case let .end(_, _, velocity):
+            if isDraggingHolding {
+                acomplishWheelMomentum(-velocity)
+                startDragCircleOffset = nil
+                isDraggingHolding = false
+            }
+        }
+    }
+
+    func receiveTap(_ tapKind: TapKind, _ location: CGPoint) {
+        if getItemFrame(at: activeIdx).contains(location) {
+            switch tapKind {
+            case .single:
+                delegate?.carouselActiveClicked(idx: activeIdx)
+            case .double:
+                delegate?.carouselActiveDoubleClicked(idx: activeIdx)
+            }
+        }
+    }
+
+    func jump(to pos: CGFloat) {
+
+        let dragCompletion = WheelMomentum(landPos: pos, delegate: self) { [weak self] in
+            guard let self = self else { return }
+            self.resetWheelMomentum()
+        }
+        self.wheelMomentum = dragCompletion
+    }
+
+    func jump(toItemIdx idx: Int) {
+
+        let dragCompletion = WheelMomentum(atItemIdx: idx, delegate: self) { [weak self] in
+            guard let self = self else { return }
+            self.resetWheelMomentum()
+        }
+        self.wheelMomentum = dragCompletion
+    }
+
+    // MARK: - Helpers
+
+    private func updateActiveIdxIfNeeded() {
+        let newActiveIdx = makeGeometryParameters()
+            .activeIdx(byAngle: wheelAngle)
+        if activeIdx != newActiveIdx {
+            activeIdx = newActiveIdx
+            delegate?.carouselActiveChanged(newIdx: newActiveIdx)
+        }
+    }
+
+    func updateOverlappingPassAnimation() {
+
+        let geometry = makeGeometryParameters()
+
+        if let leftIdx = geometry.nearestStepIdx(byAngle: wheelAngle, neighborSelectionRule: .left),
+           let rightIdx = geometry.nearestStepIdx(byAngle: wheelAngle, neighborSelectionRule: .right) {
+            let left = (getZIndex(at: leftIdx), leftIdx)
+            let right = (getZIndex(at: rightIdx), rightIdx)
+            let seq = [left, right]
+                .sorted(by: { $0.0 > $1.0 })
+            fadingOutIdx = seq.map(\.1).first!
+            fadingInIdx = seq.map(\.1).last!
+            fadingProgress = (1 - min((left.0 - right.0).magnitude, 0.01) / 0.01) * 0.375 // opacity
+        } else {
+            fadingOutIdx = nil
+            fadingInIdx = nil
+            fadingProgress = 0
+        }
+    }
+
+    private func calcZoomFactor(_ x: CGFloat) -> CGFloat? {
+         makeZoomParameters().getZoom(for: x - dim / 2)
+    }
+
+    private func acomplishWheelMomentum(_ dragVelocity: CGFloat) {
+
+        let wheelMomentum = WheelMomentum(initialVelocity: -dragVelocity, delegate: self) { [weak self] in
+            guard let self = self else { return }
+            self.resetWheelMomentum()
+        }
+        self.wheelMomentum = wheelMomentum
+    }
+
+    private func resetWheelMomentum() {
+        wheelMomentum = nil
+    }
+}
+
+extension CarouselViewModelInner {
+    // MARK: - Helpers
+
+    private func makeGeometryParameters() -> GeometryParameters {
+
+        Self.makeGeometryParameters(
+            bounds: bounds,
+            wheelRadius: wheelRadius,
+            angleStep: angleStep,
+            itemSize: itemSize,
+            itemsCount: itemsCount)
+    }
+
+    private static func makeGeometryParameters(bounds: CGRect, wheelRadius: CGFloat, angleStep: CGFloat, itemSize: CGSize, itemsCount: Int) -> GeometryParameters {
+
+        guard let itemsCount = Count(itemsCount) else { preconditionFailure("Items count must be at least 1!") }
+
+        return GeometryParameters(
+            bounds: bounds,
+            wheelRadius: wheelRadius,
+            itemSize: itemSize,
+            itemsCount: itemsCount,
+            angleStep: angleStep)
+    }
+
+    private func makeRubberBandParameters() -> RubberBandParameters {
+
+        let rubberBandDisplacement = makeGeometryParameters()
+            .wheelParameters
+            .circleOffset(forAngle: Const.Behavior.rubberBandDisplacementAngle)
+        return RubberBandParameters(bounds: circleOffsetBounds, displacement: rubberBandDisplacement)
+    }
+
+    private func makeZoomParameters() -> ZoomParameters {
+        ZoomParameters(dim: dim / 2)
+    }
+
+    // Mouse coordinate space originates from the bottom left corner of the window,
+    // while the frame originates from the top left corner of the window:
+    private func convertFromScrollWheelCoordinateSpace(_ location: CGPoint) -> CGPoint {
+        CGPoint(x: location.x - frame.origin.x,
+                y: frame.height - location.y)
+    }
+}
+
+extension CarouselViewModelInner {
+
+    var circleOffsetBounds: ClosedRange<CGFloat> {
+
+        let geometry = makeGeometryParameters()
+        let angleBounds = geometry
+            .fullAngleRange(addingExtraAngle: .pi / 2)
+        return 0...geometry.wheelParameters.circleOffset(forAngle: angleBounds.upperBound)
+    }
+
+    var dim: CGFloat { bounds.width }
+
+    var itemsCount: Int { dataSource?.carouselItemCount ?? 0 }
+}
+
+extension CarouselViewModelInner: VisibleWindowDataSource {
+
+    var visibleIndices: ClosedRange<Int>? {
+
+        let indices = makeGeometryParameters()
+            .visibleIndices(for: wheelAngle)
+        var startIdx: Int?, endIdx: Int?
+        for idx in indices {
+            let fr = getItemFrame(at: idx)
+            if startIdx == nil {
+                if fr.intersects(bounds) {
+                    startIdx = idx
+                }
+            }
+            if startIdx != nil {
+                if fr.intersects(bounds) {
+                    endIdx = idx
+                } else {
+                    break
+                }
+            }
+        }
+        if let startIdx = startIdx, let endIdx = endIdx {
+            return startIdx...endIdx
+        } else {
+            return nil
+        }
+    }
+
+    func itemView(for idx: Int) -> T.ItemView? {
+        dataSource?.carouselItemView(for: idx)
+    }
+
+    func getOffset(at idx: Int) -> CGSize {
+        makeGeometryParameters()
+            .offset(ofItemAt: idx, withOriginAngle: wheelAngle)
+    }
+
+    func getZoomFactor(at idx: Int) -> CGFloat {
+        calcZoomFactor(getOffset(at: idx).width) ?? 1
+    }
+
+    func getZIndex(at idx: Int) -> CGFloat {
+
+        let radius = dim / 2
+        let wheelParams = WheelParameters(radius: radius, angleStep: angleStep)
+        let yProjection = wheelParams.yProjection(ofItemAt: idx, withOriginAngle: wheelAngle)
+        return yProjection / radius
+    }
+
+    func getItemFrame(at idx: Int) -> CGRect {
+
+        let zoomFactor = getZoomFactor(at: idx)
+        let origin = getOffset(at: idx).modified {
+            CGSize(
+                width: $0.width - zoomFactor * itemSize.width / 2,
+                height: $0.height - zoomFactor * itemSize.height / 2
+            )
+        }
+        let frame = CGRect(
+            origin: CGPoint(x: origin.width, y: origin.height),
+            size: CGSize(width: itemSize.width * zoomFactor, height: itemSize.height * zoomFactor)
+        )
+        return frame
+    }
+}
+
+extension CarouselViewModelInner: WheelMomentumDelegate {
+
+    func anchor(by idx: Int) -> CGFloat {
+        makeGeometryParameters()
+            .circleOffsetAnchor(forItemAt: idx)
+    }
+
+    func nearestAnchor(to projection: CGFloat) -> CGFloat {
+        makeGeometryParameters()
+            .nearestCircleOffsetAnchor(toCircleOffsetProjection: projection)
+    }
+}
+
+extension CarouselViewModelInner: ScrollGestureTrackerDelegate {
+
+    func scrollGestureChanged(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
+
+        receiveScrollWheelEvent(.change(
+            location: location.modified { convertFromScrollWheelCoordinateSpace($0) },
+            translation: translation.width,
+            velocity: velocity.width))
+    }
+
+    func scrollGestureEnded(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
+
+        receiveScrollWheelEvent(.end(
+            location: location.modified { convertFromScrollWheelCoordinateSpace($0) },
+            translation: translation.width,
+            velocity: velocity.width))
+    }
+
+    func receiveScrollWheelEvent(_ event: GestureEvent) {
+
+        resetWheelMomentum()
+
+        switch event {
+        case let .change(location, translation, _):
+
+            if startScrollCircleOffset == nil {
+                resetWheelMomentum()
+
+                let isInBounds = bounds.contains(location)
+                    && visibleIndices?.contains(where: { getItemFrame(at: $0).contains(location) }) ?? false
+
+                guard isInBounds else { return }
+
+                startScrollCircleOffset = circleOffset
+            }
+            let distance = startScrollCircleOffset! - translation
+            circleOffset = makeRubberBandParameters()
+                .clamp(distance)
+
+        case let .end(_, _, velocity):
+
+            if startScrollCircleOffset != nil {
+                acomplishWheelMomentum(-velocity)
+            }
+            startScrollCircleOffset = nil
+        }
+    }
+}
+
+extension CarouselViewModelInner: KeyboardListenerDelegate {
+
+    func keyDown(_ key: KeyboardListener.Key) {
+        switch key {
+        case .leftArrow:
+            jump(toItemIdx: activeIdx - 1)
+        case .rightArrow:
+            jump(toItemIdx: activeIdx + 1)
+        default: break
+        }
+    }
+
+    func keyUp(_ key: KeyboardListener.Key) {
+        // noop
+    }
+}
+
+extension CarouselViewModelInner: SimpleTapListenerDelegate {
+    func tapped(_ phase: SimpleTapListener.Phase, _ location: CGPoint) {
+
+        let location = convertFromScrollWheelCoordinateSpace(location)
+
+        func computeJumpPos() -> CGFloat? {
+            guard let d = makeGeometryParameters()
+                .wheelParameters
+                .circleOffset(forProjection: location.x - visCenter.x) else { return nil }
+            return circleOffset + d
+        }
+
+        func getIdx() -> Int? {
+
+            guard let visible = visibleIndices else { return nil }
+
+            precondition(visible ~= activeIdx)
+
+            if getItemFrame(at: activeIdx).contains(location) {
+                return activeIdx
+            }
+
+            for idx in stride(from: activeIdx - 1, through: visible.lowerBound, by: -1) {
+                if getItemFrame(at: idx).contains(location) {
+                    return idx
+                }
+            }
+
+            for idx in stride(from: activeIdx + 1, through: visible.upperBound, by: 1) {
+                if getItemFrame(at: idx).contains(location) {
+                    return idx
+                }
+            }
+
+            return nil
+        }
+
+        if phase == .down {
+            if wheelMomentum != nil {
+                // The click was made while the gesture animation was running:
+                wheelMomentum = nil
+
+                switch Const.Behavior.touchWhileMovingBehavior {
+                case .jumpToClickLocation:
+                    if let idx = getIdx() {
+                        jump(toItemIdx: idx)
+                    }
+                case .jumpToCurrentCenterPosition:
+                    jump(to: circleOffset)
+                }
+            }
+        } else {
+            if wheelMomentum == nil {
+                // The click was made when the wheel was still:
+                if let idx = getIdx() {
+                    if idx != activeIdx {
+                        jump(toItemIdx: idx)
+                    }
+                }
+            }
+        }
+    }
+}
