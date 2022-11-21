@@ -5,10 +5,17 @@
 //  Created by Serhiy Butz on 2022-11-19.
 //
 
+protocol DisplayLinkProtocol {
+    var callback: (() -> Void)? { get set }
+    func start()
+    func cancel()
+}
+
+#if os(macOS)
 import AppKit
 import OSLog
 
-final class DisplayLink {
+final class DisplayLink: DisplayLinkProtocol {
     // MARK: - Properties
 
     private let timer: CVDisplayLink
@@ -97,3 +104,46 @@ final class DisplayLink {
         source.cancel()
     }
 }
+
+#elseif os(iOS)
+import UIKit
+
+final class DisplayLink: DisplayLinkProtocol {
+    // MARK: - Properties
+
+    private var displayLink: CADisplayLink?
+    var callback: (() -> Void)?
+
+    // MARK: - Initialization
+
+    deinit {
+        if displayLink != nil {
+            cancel()
+        }
+    }
+
+    // MARK: - API
+
+    func start() {
+        guard displayLink == nil else { return }
+        displayLink = CADisplayLink(
+            target: self,
+            selector: #selector(handleDisplayLink)
+        )
+        displayLink!.add(to: .main, forMode: .common)
+    }
+
+    func cancel() {
+        guard displayLink != nil else { return }
+
+        displayLink!.invalidate()
+        displayLink = nil
+    }
+
+    // MARK: - Lifecycle
+
+    @objc func handleDisplayLink() {
+        callback?()
+    }
+}
+#endif

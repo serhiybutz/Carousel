@@ -5,6 +5,7 @@
 //  Created by Serhiy Butz on 2022-11-19.
 //
 
+#if os(macOS)
 import AppKit
 import Carbon.HIToolbox
 
@@ -60,3 +61,4 @@ final class KeyboardListener: EventMonitorReceiver {
         }
     }
 }
+#endif

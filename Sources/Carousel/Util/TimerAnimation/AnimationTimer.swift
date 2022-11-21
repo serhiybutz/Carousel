@@ -5,14 +5,21 @@
 //  Created by Serhiy Butz on 2022-11-19.
 //
 
+#if os(macOS)
 import AppKit
-import Combine
+#elseif os(iOS)
+import UIKit
+#endif
 import OSLog
 
 final class AnimationTimer {
     // MARK: - Properties
 
-    private let displayLink = DisplayLink()! // TODO: Rework to throw
+#if os(macOS)
+    private let displayLink = DisplayLink()!
+#elseif os(iOS)
+    private let displayLink = DisplayLink()
+#endif
 
     // MARK: - Initialization
 

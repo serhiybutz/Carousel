@@ -333,6 +333,7 @@ extension CarouselViewModelInner: WheelMomentumDelegate {
     }
 }
 
+#if os(macOS)
 extension CarouselViewModelInner: ScrollGestureTrackerDelegate {
 
     func scrollGestureChanged(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
@@ -462,3 +463,4 @@ extension CarouselViewModelInner: SimpleTapListenerDelegate {
         }
     }
 }
+#endif

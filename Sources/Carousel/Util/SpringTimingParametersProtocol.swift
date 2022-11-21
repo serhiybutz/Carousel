@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 protocol SpringTimingParametersProtocol {
     var duration: TimeInterval { get }

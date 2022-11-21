@@ -5,6 +5,7 @@
 //  Created by Serhiy Butz on 2022-11-19.
 //
 
+#if os(macOS)
 import AppKit
 
 protocol SimpleTapListenerDelegate: AnyObject {
@@ -44,3 +45,4 @@ final class SimpleTapListener: EventMonitorReceiver {
         case down, up
     }
 }
+#endif

@@ -23,7 +23,9 @@ public final class CarouselViewModel<T: CarouselDataSource>: ObservableObject {
     private(set) var activeIdx: Int
 
     @Published var carouselViewModelInner: CarouselViewModelInner<T>?
+#if os(macOS)
     private var eventMonitor: EventMonitor?
+#endif
 
     // MARK: - Initialization
 
@@ -37,7 +39,9 @@ public final class CarouselViewModel<T: CarouselDataSource>: ObservableObject {
     private func updateFrameDepsIfNeeded() {
         if let frame = frame, frame != .zero {
             self.carouselViewModelInner = makeInnerViewModel(in: frame)
+#if os(macOS)
             self.eventMonitor = makeEventMonitor(with: self.carouselViewModelInner!, in: frame)
+#endif
         }
     }
 
@@ -52,12 +56,14 @@ public final class CarouselViewModel<T: CarouselDataSource>: ObservableObject {
         return CarouselViewModelInner<T>(args: args, activeIdx: activeIdxBinding, frame: frame)
     }
 
+#if os(macOS)
     private func makeEventMonitor(with innerViewModel: CarouselViewModelInner<T>, in frame: CGRect) -> EventMonitor {
         let scrollGestureTracker = ScrollGestureTracker(frame: frame, delegate: innerViewModel)
         let keyboardListener = KeyboardListener(delegate: innerViewModel)
         let tapListener = SimpleTapListener(delegate: innerViewModel)
         return EventMonitor(receivers: [scrollGestureTracker, keyboardListener, tapListener])
     }
+#endif
 
     // MARK: - Types
 

@@ -5,7 +5,11 @@
 //  Created by Serhiy Butz on 2022-11-19.
 //
 
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 enum DecelerationRate: CGFloat {
     case normal = 0.998
@@ -14,7 +18,11 @@ enum DecelerationRate: CGFloat {
 
 enum Const {
     static let decelerationRate: CGFloat = DecelerationRate.normal.rawValue
-    static let threshold = 0.5 / (NSScreen.main?.backingScaleFactor)!
+#if os(macOS)
+    static let threshold = 0.5 / NSScreen.main!.backingScaleFactor
+#elseif os(iOS)
+    static let threshold = 0.5 / UIScreen.main.scale
+#endif
 
     enum Behavior {
         enum TouchWhileMovingBehavior {

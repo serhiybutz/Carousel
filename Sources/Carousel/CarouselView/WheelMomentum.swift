@@ -7,7 +7,11 @@
 
 import OSLog
 import SwiftUI
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 protocol WheelMomentumDelegate: AnyObject {
     var circleOffset: CGFloat { get set }
