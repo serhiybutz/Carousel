@@ -23,7 +23,7 @@ public struct CarouselView<T: CarouselDataSource>: View {
     }
 
     public var body: some View {
-        Group {
+        ZStack {
             if let innerViewModel = viewModel.carouselViewModelInner {
                 CarouselViewInner(viewModel: innerViewModel)
             } else {
