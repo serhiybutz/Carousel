@@ -292,7 +292,7 @@ extension CarouselViewModelInner: VisibleWindowDataSource {
     }
 
     func getZoomFactor(at idx: Int) -> CGFloat {
-        calcZoomFactor(getOffset(at: idx).width) ?? 1
+        calcZoomFactor(getOffset(at: idx).width) ?? (1 - Const.View.zoomFactor)
     }
 
     func getZIndex(at idx: Int) -> CGFloat {

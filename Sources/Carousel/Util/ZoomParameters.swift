@@ -31,7 +31,7 @@ struct ZoomParameters {
     func getZoom(for projection: CGFloat) -> CGFloat? {
         let x = projection.magnitude / dim
         if let coeff = linkUp.getY(at: x) {
-            return Const.View.zoomFactor * coeff + 1
+            return Const.View.zoomFactor * coeff + (1 - Const.View.zoomFactor)
         } else { return nil }
     }
 }
