@@ -113,7 +113,7 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
                 startDragCircleOffset = circleOffset
 
                 self.isDraggingHolding = bounds.contains(location)
-                    && visibleIndices?.contains(where: { getItemFrame(at: $0).contains(location) }) ?? false
+                && visibleIndices?.contains(where: { itemFrame(at: $0).contains(location) }) ?? false
             }
 
             if isDraggingHolding {
@@ -131,7 +131,7 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
     }
 
     func receiveTap(_ tapKind: TapKind, _ location: CGPoint) {
-        if getItemFrame(at: activeIdx).contains(location) {
+        if itemFrame(at: activeIdx).contains(location) {
             switch tapKind {
             case .single:
                 delegate?.carouselActiveClicked(idx: activeIdx)
@@ -176,7 +176,7 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
     }
 
     private func calcZoomFactor(_ x: CGFloat) -> CGFloat? {
-         makeZoomParameters().getZoom(for: x - dim / 2)
+        makeZoomParameters().getZoom(for: x - dim / 2)
     }
 
     private func acomplishWheelMomentum(_ dragVelocity: CGFloat) {
@@ -261,7 +261,7 @@ extension CarouselViewModelInner: VisibleWindowDataSource {
             .visibleIndices(for: wheelAngle)
         var startIdx: Int?, endIdx: Int?
         for idx in indices {
-            let fr = getItemFrame(at: idx)
+            let fr = itemFrame(at: idx)
             if startIdx == nil {
                 if fr.intersects(bounds) {
                     startIdx = idx
@@ -286,16 +286,16 @@ extension CarouselViewModelInner: VisibleWindowDataSource {
         dataSource?.carouselItemView(for: idx)
     }
 
-    func getOffset(at idx: Int) -> CGSize {
+    func offset(at idx: Int) -> CGSize {
         makeGeometryParameters()
             .offset(ofItemAt: idx, withOriginAngle: wheelAngle)
     }
 
-    func getZoomFactor(at idx: Int) -> CGFloat {
-        calcZoomFactor(getOffset(at: idx).width) ?? (1 - Const.View.zoomFactor)
+    func zoomFactor(at idx: Int) -> CGFloat {
+        calcZoomFactor(offset(at: idx).width) ?? (1 - Const.View.zoomFactor)
     }
 
-    func getZIndex(at idx: Int) -> CGFloat {
+    func zIndex(at idx: Int) -> CGFloat {
 
         let radius = dim / 2
         let wheelParams = WheelParameters(radius: radius, angleStep: angleStep)
@@ -303,10 +303,10 @@ extension CarouselViewModelInner: VisibleWindowDataSource {
         return yProjection / radius
     }
 
-    func getItemFrame(at idx: Int) -> CGRect {
+    func itemFrame(at idx: Int) -> CGRect {
 
-        let zoomFactor = getZoomFactor(at: idx)
-        let origin = getOffset(at: idx).modified {
+        let zoomFactor = zoomFactor(at: idx)
+        let origin = offset(at: idx).modified {
             CGSize(
                 width: $0.width - zoomFactor * itemSize.width / 2,
                 height: $0.height - zoomFactor * itemSize.height / 2
@@ -363,7 +363,7 @@ extension CarouselViewModelInner: ScrollGestureTrackerDelegate {
                 resetWheelMomentum()
 
                 let isInBounds = bounds.contains(location)
-                    && visibleIndices?.contains(where: { getItemFrame(at: $0).contains(location) }) ?? false
+                && visibleIndices?.contains(where: { itemFrame(at: $0).contains(location) }) ?? false
 
                 guard isInBounds else { return }
 
@@ -412,24 +412,24 @@ extension CarouselViewModelInner: SimpleTapListenerDelegate {
             return circleOffset + d
         }
 
-        func getIdx() -> Int? {
+        var getIdx: Int? {
 
             guard let visible = visibleIndices else { return nil }
 
             precondition(visible ~= activeIdx)
 
-            if getItemFrame(at: activeIdx).contains(location) {
+            if itemFrame(at: activeIdx).contains(location) {
                 return activeIdx
             }
 
             for idx in stride(from: activeIdx - 1, through: visible.lowerBound, by: -1) {
-                if getItemFrame(at: idx).contains(location) {
+                if itemFrame(at: idx).contains(location) {
                     return idx
                 }
             }
 
             for idx in stride(from: activeIdx + 1, through: visible.upperBound, by: 1) {
-                if getItemFrame(at: idx).contains(location) {
+                if itemFrame(at: idx).contains(location) {
                     return idx
                 }
             }

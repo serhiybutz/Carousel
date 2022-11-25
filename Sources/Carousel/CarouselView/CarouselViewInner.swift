@@ -40,8 +40,8 @@ struct CarouselViewInner<T: CarouselDataSource>: View {
                                             Group {
                                                 Rectangle()
                                                     .frame(width: viewModel.itemSize.width, height: viewModel.itemSize.height)
-                                                    .scaleEffect(viewModel.visible.getZoomFactor(at: crossFadeState.fadeOutIdx))
-                                                    .offset(viewModel.visible.getOffset(at: crossFadeState.fadeOutIdx).modified {
+                                                    .scaleEffect(viewModel.visible.zoomFactor(at: crossFadeState.fadeOutIdx))
+                                                    .offset(viewModel.visible.offset(at: crossFadeState.fadeOutIdx).modified {
                                                         CGSize(
                                                             width: $0.width - viewModel.itemSize.width / 2,
                                                             height: $0.height - viewModel.itemSize.height / 2
@@ -79,15 +79,15 @@ struct ItemView<T: CarouselDataSource>: View {
     init(idx: Int, viewModel: CarouselViewModelInner<T>) {
         self.idx = idx
         self._viewModel = ObservedObject(wrappedValue: viewModel)
-        self.zIndex = viewModel.visible.getZIndex(at: idx)
+        self.zIndex = viewModel.visible.zIndex(at: idx)
     }
 
     var body: some View {
 
         viewModel.itemView(for: idx)
             .frame(width: viewModel.itemSize.width, height: viewModel.itemSize.height)
-            .scaleEffect(viewModel.visible.getZoomFactor(at: idx))
-            .offset(viewModel.visible.getOffset(at: idx).modified {
+            .scaleEffect(viewModel.visible.zoomFactor(at: idx))
+            .offset(viewModel.visible.offset(at: idx).modified {
                 CGSize(
                     width: $0.width - viewModel.itemSize.width / 2,
                     height: $0.height - viewModel.itemSize.height / 2

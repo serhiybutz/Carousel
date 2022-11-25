@@ -11,7 +11,7 @@ import CoreGraphics
 public enum Defaults {
     public enum Wheel {
 #if os(macOS)
-        public static let angleStep: CGFloat = CGFloat.pi / 2 / 7
+        public static let angleStep: CGFloat = CGFloat.pi / 2 / 8
 #elseif os(iOS)
         public static let angleStep: CGFloat = CGFloat.pi / 2 / 14
 #endif
