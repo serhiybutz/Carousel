@@ -39,21 +39,6 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
         }
     }
 
-    var circleOffset: CGFloat {
-        get {
-            makeGeometryParameters()
-                .wheelParameters
-                .circleOffset(forAngle: wheelAngle)
-        }
-        set {
-            wheelAngle = makeGeometryParameters()
-                .wheelParameters
-                .angle(forCircleOffset: newValue)
-
-            updateCrossFadeAnimation()
-        }
-    }
-
     let wheelRadius: CGFloat
     let angleStep: CGFloat
     let itemSize: CGSize
@@ -154,6 +139,10 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
 extension CarouselViewModelInner {
     // MARK: - Helpers
 
+    private var dim: CGFloat { bounds.width }
+
+    private var itemsCount: Int { dataSource?.carouselItemCount ?? 0 }
+
     private func makeGeometryParameters() -> GeometryParameters {
 
         Self.makeGeometryParameters(
@@ -194,21 +183,6 @@ extension CarouselViewModelInner {
         CGPoint(x: location.x - frame.origin.x,
                 y: frame.height - location.y)
     }
-}
-
-extension CarouselViewModelInner {
-
-    var circleOffsetBounds: ClosedRange<CGFloat> {
-
-        let geometry = makeGeometryParameters()
-        let angleBounds = geometry
-            .fullAngleRange(addingExtraAngle: .pi / 2)
-        return 0...geometry.wheelParameters.circleOffset(forAngle: angleBounds.upperBound)
-    }
-
-    var dim: CGFloat { bounds.width }
-
-    var itemsCount: Int { dataSource?.carouselItemCount ?? 0 }
 }
 
 extension CarouselViewModelInner: VisibleWindowDataSource {
@@ -280,84 +254,39 @@ extension CarouselViewModelInner: VisibleWindowDataSource {
 
 extension CarouselViewModelInner: WheelMomentumDelegate {
 
-    func anchor(by idx: Int) -> CGFloat {
-        makeGeometryParameters()
-            .circleOffsetAnchor(forItemAt: idx)
+    var circleOffset: CGFloat {
+        get {
+            makeGeometryParameters()
+                .wheelParameters
+                .circleOffset(forAngle: wheelAngle)
+        }
+        set {
+            wheelAngle = makeGeometryParameters()
+                .wheelParameters
+                .angle(forCircleOffset: newValue)
+
+            updateCrossFadeAnimation()
+        }
+    }
+
+    var circleOffsetBounds: ClosedRange<CGFloat> {
+
+        let geometry = makeGeometryParameters()
+        let angleBounds = geometry
+            .fullAngleRange(addingExtraAngle: .pi / 2)
+        return 0...geometry.wheelParameters.circleOffset(forAngle: angleBounds.upperBound)
     }
 
     func nearestAnchor(to projection: CGFloat) -> CGFloat {
         makeGeometryParameters()
             .nearestCircleOffsetAnchor(toCircleOffsetProjection: projection)
     }
-}
 
-#if os(macOS)
-extension CarouselViewModelInner: ScrollGestureTrackerDelegate {
-
-    func scrollGestureChanged(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
-
-        receiveScrollWheelEvent(.change(
-            location: location.modified { convertFromScrollWheelCoordinateSpace($0) },
-            translation: translation.width,
-            velocity: velocity.width))
-    }
-
-    func scrollGestureEnded(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
-
-        receiveScrollWheelEvent(.end(
-            location: location.modified { convertFromScrollWheelCoordinateSpace($0) },
-            translation: translation.width,
-            velocity: velocity.width))
-    }
-
-    private func receiveScrollWheelEvent(_ event: GestureEvent) {
-
-        resetWheelMomentum()
-
-        switch event {
-        case let .change(location, translation, _):
-
-            if startScrollCircleOffset == nil {
-                resetWheelMomentum()
-
-                let isInBounds = bounds.contains(location)
-                && visibleIndices?.contains(where: { itemFrame(at: $0).contains(location) }) ?? false
-
-                guard isInBounds else { return }
-
-                startScrollCircleOffset = circleOffset
-            }
-            let distance = startScrollCircleOffset! - translation
-            circleOffset = makeRubberBandParameters()
-                .clamp(distance)
-
-        case let .end(_, _, velocity):
-
-            if startScrollCircleOffset != nil {
-                acomplishWheelMomentum(-velocity)
-            }
-            startScrollCircleOffset = nil
-        }
+    func anchor(by idx: Int) -> CGFloat {
+        makeGeometryParameters()
+            .circleOffsetAnchor(forItemAt: idx)
     }
 }
-
-extension CarouselViewModelInner: KeyboardListenerDelegate {
-
-    func keyDown(_ key: KeyboardListener.Key) {
-        switch key {
-        case .leftArrow:
-            jump(toItemIdx: activeIdx - 1)
-        case .rightArrow:
-            jump(toItemIdx: activeIdx + 1)
-        default: break
-        }
-    }
-
-    func keyUp(_ key: KeyboardListener.Key) {
-        // noop
-    }
-}
-#endif
 
 extension CarouselViewModelInner {
 
@@ -455,6 +384,74 @@ extension CarouselViewModelInner {
         state = .idle
     }
 }
+
+#if os(macOS)
+extension CarouselViewModelInner: ScrollGestureTrackerDelegate {
+
+    func scrollGestureChanged(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
+
+        receiveScrollWheelEvent(.change(
+            location: location.modified { convertFromScrollWheelCoordinateSpace($0) },
+            translation: translation.width,
+            velocity: velocity.width))
+    }
+
+    func scrollGestureEnded(_ location: CGPoint, _ translation: CGSize, _ velocity: CGSize) {
+
+        receiveScrollWheelEvent(.end(
+            location: location.modified { convertFromScrollWheelCoordinateSpace($0) },
+            translation: translation.width,
+            velocity: velocity.width))
+    }
+
+    private func receiveScrollWheelEvent(_ event: GestureEvent) {
+
+        resetWheelMomentum()
+
+        switch event {
+        case let .change(location, translation, _):
+
+            if startScrollCircleOffset == nil {
+                resetWheelMomentum()
+
+                let isInBounds = bounds.contains(location)
+                && visibleIndices?.contains(where: { itemFrame(at: $0).contains(location) }) ?? false
+
+                guard isInBounds else { return }
+
+                startScrollCircleOffset = circleOffset
+            }
+            let distance = startScrollCircleOffset! - translation
+            circleOffset = makeRubberBandParameters()
+                .clamp(distance)
+
+        case let .end(_, _, velocity):
+
+            if startScrollCircleOffset != nil {
+                acomplishWheelMomentum(-velocity)
+            }
+            startScrollCircleOffset = nil
+        }
+    }
+}
+
+extension CarouselViewModelInner: KeyboardListenerDelegate {
+
+    func keyDown(_ key: KeyboardListener.Key) {
+        switch key {
+        case .leftArrow:
+            jump(toItemIdx: activeIdx - 1)
+        case .rightArrow:
+            jump(toItemIdx: activeIdx + 1)
+        default: break
+        }
+    }
+
+    func keyUp(_ key: KeyboardListener.Key) {
+        // noop
+    }
+}
+#endif
 
 extension CarouselViewModelInner {
     // MARK: - Types
