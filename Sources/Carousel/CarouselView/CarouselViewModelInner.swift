@@ -70,9 +70,13 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
 
     private(set) var isDraggingHolding: Bool = false
 
-    private var wheelMomentum: WheelMomentum?
-
     @Published var crossFadeState: CrossFadeParameters?
+
+    enum State {
+        case idle
+        case wheelRotating(WheelMomentum)
+    }
+    @Published var state: State = .idle
 
     // MARK: - Initialization
 
@@ -141,24 +145,6 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
         }
     }
 
-    func jump(to pos: CGFloat) {
-
-        let dragCompletion = WheelMomentum(landPos: pos, delegate: self) { [weak self] in
-            guard let self = self else { return }
-            self.resetWheelMomentum()
-        }
-        self.wheelMomentum = dragCompletion
-    }
-
-    func jump(toItemIdx idx: Int) {
-
-        let dragCompletion = WheelMomentum(atItemIdx: idx, delegate: self) { [weak self] in
-            guard let self = self else { return }
-            self.resetWheelMomentum()
-        }
-        self.wheelMomentum = dragCompletion
-    }
-
     // MARK: - Helpers
 
     private func updateActiveIdxIfNeeded() {
@@ -185,11 +171,7 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
             guard let self = self else { return }
             self.resetWheelMomentum()
         }
-        self.wheelMomentum = wheelMomentum
-    }
-
-    private func resetWheelMomentum() {
-        wheelMomentum = nil
+        state = .wheelRotating(wheelMomentum)
     }
 }
 
@@ -401,66 +383,97 @@ extension CarouselViewModelInner: KeyboardListenerDelegate {
 }
 
 extension CarouselViewModelInner: SimpleTapListenerDelegate {
+    
     func tapped(_ phase: SimpleTapListener.Phase, _ location: CGPoint) {
 
         let location = convertFromScrollWheelCoordinateSpace(location)
 
-        func computeJumpPos() -> CGFloat? {
-            guard let d = makeGeometryParameters()
-                .wheelParameters
-                .circleOffset(forProjection: location.x - visCenter.x) else { return nil }
-            return circleOffset + d
-        }
-
-        var getIdx: Int? {
-
-            guard let visible = visibleIndices else { return nil }
-
-            precondition(visible ~= activeIdx)
-
-            if itemFrame(at: activeIdx).contains(location) {
-                return activeIdx
-            }
-
-            for idx in stride(from: activeIdx - 1, through: visible.lowerBound, by: -1) {
-                if itemFrame(at: idx).contains(location) {
-                    return idx
-                }
-            }
-
-            for idx in stride(from: activeIdx + 1, through: visible.upperBound, by: 1) {
-                if itemFrame(at: idx).contains(location) {
-                    return idx
-                }
-            }
-
-            return nil
-        }
-
         if phase == .down {
-            if wheelMomentum != nil {
-                // The click was made while the gesture animation was running:
-                wheelMomentum = nil
-
-                switch Const.Behavior.touchWhileMovingBehavior {
-                case .jumpToClickLocation:
-                    if let idx = getIdx() {
-                        jump(toItemIdx: idx)
-                    }
-                case .jumpToCurrentCenterPosition:
-                    jump(to: circleOffset)
-                }
-            }
+            tappedDown(at: location)
         } else {
-            if wheelMomentum == nil {
-                // The click was made when the wheel was still:
-                if let idx = getIdx() {
-                    if idx != activeIdx {
-                        jump(toItemIdx: idx)
-                    }
-                }
-            }
+            tappedUp(at: location)
         }
     }
 }
 #endif
+
+extension CarouselViewModelInner {
+
+    private func tappedDown(at location: CGPoint) {
+
+        switch state {
+        case .wheelRotating:
+            // The click was made while the gesture animation was running:
+            switch Const.Behavior.touchWhileMovingBehavior {
+            case .jumpToClickLocation:
+                if let idx = getIdx(at: location) {
+                    jump(toItemIdx: idx)
+                }
+            case .jumpToCurrentCenterPosition:
+                jump(to: circleOffset)
+            }
+        default: break
+        }
+    }
+
+    private func tappedUp(at location: CGPoint) {
+
+        switch state {
+        case .idle:
+            // The click was made when the wheel was still:
+            if let idx = getIdx(at: location) {
+                if idx != activeIdx {
+                    jump(toItemIdx: idx)
+                }
+            }
+        default: break
+        }
+    }
+
+    private func jump(to pos: CGFloat) {
+
+        let wheelMomentum = WheelMomentum(landPos: pos, delegate: self) { [weak self] in
+            guard let self = self else { return }
+            self.resetWheelMomentum()
+        }
+        state = .wheelRotating(wheelMomentum)
+    }
+
+    private func jump(toItemIdx idx: Int) {
+
+        let wheelMomentum = WheelMomentum(atItemIdx: idx, delegate: self) { [weak self] in
+            guard let self = self else { return }
+            self.resetWheelMomentum()
+        }
+        state = .wheelRotating(wheelMomentum)
+    }
+
+    private func getIdx(at location: CGPoint) -> Int? {
+
+        guard let visible = visibleIndices else { return nil }
+
+        precondition(visible ~= activeIdx)
+
+        if itemFrame(at: activeIdx).contains(location) {
+            return activeIdx
+        }
+
+        for idx in stride(from: activeIdx - 1, through: visible.lowerBound, by: -1) {
+            if itemFrame(at: idx).contains(location) {
+                return idx
+            }
+        }
+
+        for idx in stride(from: activeIdx + 1, through: visible.upperBound, by: 1) {
+            if itemFrame(at: idx).contains(location) {
+                return idx
+            }
+        }
+
+        return nil
+    }
+
+    private func resetWheelMomentum() {
+        state = .idle
+    }
+}
