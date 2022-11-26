@@ -60,12 +60,11 @@ struct CarouselViewInner<T: CarouselDataSource>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
         .gesture(dragGesture)
-        .simultaneousGesture(ClickGesture(count: .init(2)!).onEnded {
-            viewModel.receiveTap(.double, $0)
-        })
-        .simultaneousGesture(ClickGesture().onEnded {
-            viewModel.receiveTap(.single, $0)
-        })
+        .onTouch {
+            viewModel.tappedDown(at: $0)
+        } onTouchedUp: {
+            viewModel.tappedUp(at: $0)
+        }
     }
 }
 

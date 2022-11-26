@@ -60,8 +60,7 @@ public final class CarouselViewModel<T: CarouselDataSource>: ObservableObject {
     private func makeEventMonitor(with innerViewModel: CarouselViewModelInner<T>, in frame: CGRect) -> EventMonitor {
         let scrollGestureTracker = ScrollGestureTracker(frame: frame, delegate: innerViewModel)
         let keyboardListener = KeyboardListener(delegate: innerViewModel)
-        let tapListener = SimpleTapListener(delegate: innerViewModel)
-        return EventMonitor(receivers: [scrollGestureTracker, keyboardListener, tapListener])
+        return EventMonitor(receivers: [scrollGestureTracker, keyboardListener])
     }
 #endif
 

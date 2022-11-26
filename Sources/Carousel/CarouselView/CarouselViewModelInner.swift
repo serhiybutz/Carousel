@@ -11,16 +11,9 @@ import Combine
 @MainActor
 public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObject {
 
-    enum GestureEvent {
-        case change(location: CGPoint, translation: CGFloat, velocity: CGFloat)
-        case end(location: CGPoint, translation: CGFloat, velocity: CGFloat)
-    }
-
-    enum TapKind {
-        case single, double
-    }
-
     // MARK: - Properties
+
+    @Published var state: State = .idle
 
     private weak var dataSource: T?
     private weak var delegate: CarouselDelegate?
@@ -71,12 +64,6 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
     private(set) var isDraggingHolding: Bool = false
 
     @Published var crossFadeState: CrossFadeParameters?
-
-    enum State {
-        case idle
-        case wheelRotating(WheelMomentum)
-    }
-    @Published var state: State = .idle
 
     // MARK: - Initialization
 
@@ -130,17 +117,6 @@ public final class CarouselViewModelInner<T: CarouselDataSource>: ObservableObje
                 acomplishWheelMomentum(-velocity)
                 startDragCircleOffset = nil
                 isDraggingHolding = false
-            }
-        }
-    }
-
-    func receiveTap(_ tapKind: TapKind, _ location: CGPoint) {
-        if itemFrame(at: activeIdx).contains(location) {
-            switch tapKind {
-            case .single:
-                delegate?.carouselActiveClicked(idx: activeIdx)
-            case .double:
-                delegate?.carouselActiveDoubleClicked(idx: activeIdx)
             }
         }
     }
@@ -334,7 +310,7 @@ extension CarouselViewModelInner: ScrollGestureTrackerDelegate {
             velocity: velocity.width))
     }
 
-    func receiveScrollWheelEvent(_ event: GestureEvent) {
+    private func receiveScrollWheelEvent(_ event: GestureEvent) {
 
         resetWheelMomentum()
 
@@ -381,25 +357,11 @@ extension CarouselViewModelInner: KeyboardListenerDelegate {
         // noop
     }
 }
-
-extension CarouselViewModelInner: SimpleTapListenerDelegate {
-    
-    func tapped(_ phase: SimpleTapListener.Phase, _ location: CGPoint) {
-
-        let location = convertFromScrollWheelCoordinateSpace(location)
-
-        if phase == .down {
-            tappedDown(at: location)
-        } else {
-            tappedUp(at: location)
-        }
-    }
-}
 #endif
 
 extension CarouselViewModelInner {
 
-    private func tappedDown(at location: CGPoint) {
+    func tappedDown(at location: CGPoint) {
 
         switch state {
         case .wheelRotating:
@@ -412,20 +374,36 @@ extension CarouselViewModelInner {
             case .jumpToCurrentCenterPosition:
                 jump(to: circleOffset)
             }
+        case .singleClick:
+            state = .doubleClick
+            delegate?.carouselActiveDoubleClicked(idx: activeIdx)
         default: break
         }
     }
 
-    private func tappedUp(at location: CGPoint) {
+    func tappedUp(at location: CGPoint) {
 
         switch state {
         case .idle:
             // The click was made when the wheel was still:
             if let idx = getIdx(at: location) {
-                if idx != activeIdx {
+                if idx == activeIdx {
+                    let timer = OneShotTimer(interval: 0.5) { [weak self] in
+                        Task {
+                            await MainActor.run {
+                                guard let self = self else { return }
+                                self.state = .idle
+                                self.delegate?.carouselActiveClicked(idx: self.activeIdx)
+                            }
+                        }
+                    }
+                    state = .singleClick(timer)
+                } else {
                     jump(toItemIdx: idx)
                 }
             }
+        case .doubleClick:
+            state = .idle
         default: break
         }
     }
@@ -475,5 +453,21 @@ extension CarouselViewModelInner {
 
     private func resetWheelMomentum() {
         state = .idle
+    }
+}
+
+extension CarouselViewModelInner {
+    // MARK: - Types
+
+    enum State {
+        case idle
+        case wheelRotating(WheelMomentum)
+        case singleClick(OneShotTimer)
+        case doubleClick
+    }
+
+    enum GestureEvent {
+        case change(location: CGPoint, translation: CGFloat, velocity: CGFloat)
+        case end(location: CGPoint, translation: CGFloat, velocity: CGFloat)
     }
 }
