@@ -14,7 +14,7 @@ final class OneShotTimer {
     init(interval: TimeInterval, fire: @escaping () -> Void) {
         self.task = Task.detached {
             do {
-                try await Task.sleep(nanoseconds: interval.asNanoseconds)
+                try await Task.sleep(seconds: interval)
                 fire()
             } catch {}
         }
@@ -23,8 +23,4 @@ final class OneShotTimer {
     deinit {
         task.cancel()
     }
-}
-
-extension TimeInterval {
-    var asNanoseconds: UInt64 { UInt64(self * 1_000_000_000) }
 }
