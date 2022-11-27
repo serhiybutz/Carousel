@@ -317,7 +317,7 @@ extension CarouselViewModelInner {
             // The click was made when the wheel was still:
             if let idx = getIdx(at: location) {
                 if idx == activeIdx {
-                    let timer = OneShotTimer(interval: 0.5) { [weak self] in
+                    let timer = OneShotTimer(interval: Const.TapGesture.doubleClickTime) { [weak self] in
                         Task {
                             await MainActor.run {
                                 guard let self = self else { return }
@@ -459,6 +459,7 @@ extension CarouselViewModelInner {
     enum State {
         case idle
         case wheelRotating(WheelMomentum)
+        /// Expecting a possible double click
         case singleClick(OneShotTimer)
         case doubleClick
     }

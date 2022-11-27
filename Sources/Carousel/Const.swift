@@ -51,4 +51,8 @@ enum Const {
         static let rangeRatio: CGFloat = 0.15
         static let opacityCorrection: CGFloat = 0.75
     }
+
+    enum TapGesture {
+        static let doubleClickTime: CGFloat = 0.25 // Standard: 0.5
+    }
 }
